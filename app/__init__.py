@@ -1,0 +1,1 @@
+"""Aplicacao Smart Impact IA."""
