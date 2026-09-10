@@ -19,7 +19,6 @@ jobs:
         run: uv run pytest -q
 
   web:
-    if: ${{ hashFiles('web/package-lock.json') != '' }}
     runs-on: ubuntu-latest
     defaults:
       run:
