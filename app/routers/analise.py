@@ -1,4 +1,4 @@
-"""Endpoints de analise ESG."""
+"""Endpoints do núcleo de consulta rastreável."""
 
 from __future__ import annotations
 
@@ -7,50 +7,56 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.config import ConfiguracaoError
-from app.rag import buscar_contexto, pipeline_rag
-from app.schemas import RequisicaoAnalise, RespostaAnalise
+from app.rag import RESPOSTA_SEM_CONTEXTO, buscar_contexto_detalhado, pipeline_rag
+from app.schemas import EvidenciaRecuperada, RequisicaoConsulta, RespostaConsulta
 
-router = APIRouter(prefix="/analise", tags=["analise"])
+router = APIRouter(prefix="/v1", tags=["rag"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/saude")
-def saude() -> dict[str, str]:
-    """Healthcheck da API."""
-
-    return {"status": "ok"}
+@router.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok", "product": "tracerag-core"}
 
 
-@router.post("/gerar", response_model=RespostaAnalise)
-def gerar_analise(requisicao: RequisicaoAnalise) -> RespostaAnalise:
-    """Gera uma analise ESG com suporte de RAG."""
+@router.post("/projects/{project_id}/query", response_model=RespostaConsulta)
+def consultar(project_id: str, requisicao: RequisicaoConsulta) -> RespostaConsulta:
+    """Consulta um projeto e devolve resposta junto das evidências recuperadas."""
 
     try:
-        contexto = buscar_contexto(requisicao.pergunta)
+        trechos = buscar_contexto_detalhado(
+            requisicao.pergunta,
+            k=requisicao.k,
+            project_id=project_id,
+            distancia_maxima=requisicao.distancia_maxima,
+        )
+    except ValueError as erro:
+        raise HTTPException(status_code=422, detail=str(erro)) from erro
     except Exception as erro:
-        logger.exception("Erro ao consultar o banco vetorial.")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Falha ao consultar o banco vetorial: {erro}",
-        ) from erro
+        logger.exception("Falha ao consultar o indice vetorial.")
+        raise HTTPException(status_code=500, detail="Falha ao consultar o indice vetorial.") from erro
+
+    contexto = [trecho.texto for trecho in trechos]
 
     try:
-        recomendacao = pipeline_rag(
-            pergunta=requisicao.pergunta,
-            dados_empresa=requisicao.dados_empresa.model_dump(),
-            contexto=contexto,
-        )
-        return RespostaAnalise(
-            empresa=requisicao.dados_empresa.nome,
-            recomendacao=recomendacao,
-            trechos_contexto_usados=contexto,
-        )
+        resposta = pipeline_rag(requisicao.pergunta, contexto=contexto)
     except ConfiguracaoError as erro:
-        logger.exception("Erro de configuracao durante analise.")
         raise HTTPException(status_code=500, detail=str(erro)) from erro
     except Exception as erro:
-        logger.exception("Falha ao gerar analise.")
-        raise HTTPException(
-            status_code=500,
-            detail="Nao foi possivel gerar a analise ESG devido a uma falha no LLM.",
-        ) from erro
+        logger.exception("Falha ao gerar resposta.")
+        raise HTTPException(status_code=500, detail="Falha ao gerar resposta com o LLM.") from erro
+
+    return RespostaConsulta(
+        project_id=project_id,
+        resposta=resposta,
+        abstencao=resposta == RESPOSTA_SEM_CONTEXTO,
+        evidencias=[
+            EvidenciaRecuperada(
+                texto=trecho.texto,
+                origem=trecho.origem,
+                chunk=trecho.chunk,
+                distancia=trecho.distancia,
+            )
+            for trecho in trechos
+        ],
+    )
