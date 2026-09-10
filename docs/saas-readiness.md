@@ -21,7 +21,7 @@ TraceRAG is now structured as an alpha SaaS rather than only a local RAG core.
 
 ## Deliberate alpha limits
 
-The hosted runner is synchronous and capped at 25 cases. Not yet implemented:
+The hosted runner is synchronous and capped at 20 cases. Not yet implemented:
 
 - subscription billing;
 - background queues/workers;
