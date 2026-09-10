@@ -1,0 +1,1 @@
+A API de exemplo permite no maximo 100 requisicoes por minuto por projeto. Quando o limite e excedido, o cliente deve aguardar antes de repetir a chamada. Esse valor e ficticio e existe somente para testes de retrieval do repositorio.

@@ -1,0 +1,1 @@
+Um incidente de severidade critica exige escalacao imediata quando ha indisponibilidade total, risco de perda de dados ou impacto amplo aos usuarios. Incidentes menores podem seguir a fila operacional normal. Este documento e sintetico e existe apenas para testes de retrieval.

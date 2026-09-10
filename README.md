@@ -1,71 +1,100 @@
-# Smart Impact IA
+# TraceRAG Core
 
-Prototipo minimo viavel da Frente de Desenvolvimento de Modelo do projeto Smart Impact IA. A proposta e analisar microempreendimentos da regiao serrana do Rio de Janeiro com LLM + RAG e gerar recomendacoes estruturadas alinhadas a ESG e ODS.
+Núcleo experimental para testar regressões em sistemas RAG com foco em retrieval verificável.
 
-O repositorio tambem funciona como laboratorio de confiabilidade do pipeline: a recuperacao preserva proveniencia, a API reutiliza exatamente o contexto enviado ao LLM e o sistema possui um benchmark reproduzivel para detectar regressoes de retrieval.
+O projeto nasceu da necessidade de responder perguntas simples que muitas aplicações de IA não conseguem responder bem: qual fonte sustentou a resposta, qual chunk foi recuperado, quanto esse retrieval mudou depois de trocar embedding ou chunking e quando o sistema deveria se recusar a responder.
+
+O objetivo não é competir com plataformas completas de observabilidade. O recorte é menor: regression testing de retrieval, evidência por consulta e uma API simples que pode ser colocada em CI.
+
+## O que existe hoje
+
+- coleções separadas por `project_id`;
+- ingestão idempotente de documentos `.txt` com IDs determinísticos;
+- retrieval com origem, chunk e distância;
+- limiar opcional de distância para rejeitar evidência fraca;
+- abstensão determinística quando não há contexto suficiente;
+- benchmark com `hit_rate`, `MRR` e `recall_origens`;
+- API FastAPI que devolve resposta e evidências usadas;
+- testes automatizados e GitHub Actions.
 
 ## Fluxo
 
-1. Documento entra no pipeline.
-2. O texto e dividido em chunks.
-3. Cada chunk vira embedding.
-4. Os embeddings sao indexados no ChromaDB persistente com metadados de origem.
-5. A pergunta da empresa chega pela API.
-6. O sistema recupera os trechos relevantes uma unica vez.
-7. O mesmo contexto e usado na resposta da API e no prompt do LLM.
-8. Sem contexto recuperado, o pipeline se abstém e nao chama o LLM.
-9. Com contexto, o LLM gera a recomendacao final.
+```text
+Documentos
+   ↓
+chunking + embeddings
+   ↓
+coleção do projeto
+   ↓
+retrieval
+   ↓
+evidências + distância
+   ↓
+threshold opcional
+   ↓
+resposta ou abstensão
+```
 
-## Instalacao
+## Instalação
 
 ```bash
 uv sync
 ```
 
-## Configuracao
+Copie `.env.example` para `.env` e configure o provedor desejado.
 
-1. Copie `.env.example` para `.env`.
-2. Ajuste `LLM_PROVIDER`, `OPENAI_API_KEY` e demais variaveis conforme o provedor escolhido.
-3. Para OpenAI, `OPENAI_API_KEY` e obrigatoria.
-
-## Indexacao
+## Indexar um projeto
 
 ```bash
-uv run python -c "from app.ingestao import indexar_documentos; indexar_documentos('data/documentos_teste')"
+uv run python -c "from app.ingestao import indexar_documentos; print(indexar_documentos('data/documentos_teste', project_id='docs-demo'))"
 ```
 
-## Execucao da API
+## Rodar API
 
 ```bash
 uv run uvicorn app.main:app --reload
 ```
 
-## Testes
+Healthcheck:
 
 ```bash
-uv run pytest
+curl http://127.0.0.1:8000/v1/health
 ```
 
-## Avaliacao de retrieval
-
-Depois de indexar `data/documentos_teste`:
+Consulta:
 
 ```bash
-uv run python scripts/evaluate_retrieval.py --k 3
+curl -X POST http://127.0.0.1:8000/v1/projects/docs-demo/query \
+  -H 'Content-Type: application/json' \
+  -d '{"pergunta":"Qual é o limite de requisições da API?","k":3,"distancia_maxima":0.45}'
 ```
 
-O benchmark calcula `hit_rate`, `MRR` e `recall_origens` usando os casos declarados em `data/eval_cases.jsonl`.
+A resposta inclui `abstencao` e a lista de `evidencias` com origem, chunk e distância.
 
-A implementacao das metricas nao implica um resultado de qualidade por si so. Numeros devem ser registrados somente depois de executar o benchmark no ambiente e no modelo de embedding escolhidos. O protocolo e os limites estao em [`docs/evaluation.md`](docs/evaluation.md).
+## Benchmark
 
-## Exemplo de requisicao
+Depois de indexar a base de teste:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/analise/gerar ^
-  -H "Content-Type: application/json" ^
-  -d "{\"dados_empresa\": {\"nome\": \"Padaria Serra Verde\", \"setor\": \"alimentacao\", \"descricao\": \"Pequena padaria de bairro com foco em atendimento local e fornecedores regionais.\", \"funcionarios\": 6}, \"pergunta\": \"Quais acoes ESG devo priorizar?\"}"
+uv run python scripts/evaluate_retrieval.py --project-id docs-demo --k 3
 ```
 
-## Limites atuais
+Para testar um threshold:
 
-O conjunto de avaliacao e pequeno e sintetico. Ele serve para regressao tecnica, nao para afirmar desempenho em producao. O sistema ainda precisa de casos revisados pela equipe, limiar de relevancia calibrado, avaliacao das citacoes, medicao de custo e latencia e testes de contexto adversarial antes de qualquer uso decisorio.
+```bash
+uv run python scripts/evaluate_retrieval.py --project-id docs-demo --k 3 --max-distance 0.45
+```
+
+Os números só devem ser registrados depois de executar o benchmark com o embedding e a base que realmente serão usados. Um threshold não deve ser escolhido por intuição.
+
+## Direção de produto
+
+A hipótese comercial é oferecer uma camada simples de regression testing para equipes pequenas que já possuem RAG, mas ainda validam mudanças manualmente.
+
+O produto futuro pode receber um endpoint do cliente ou SDK, executar um dataset de perguntas, comparar retrieval entre versões e bloquear um deploy quando uma mudança ultrapassar os limites configurados.
+
+Isso ainda não é um SaaS pronto. Antes de produção faltam autenticação, isolamento forte de tenants, armazenamento gerenciado, política de retenção, rate limiting, billing e observabilidade operacional. Essas lacunas estão documentadas em `docs/saas-readiness.md`.
+
+## Limites
+
+A base incluída é sintética e serve apenas para regressão técnica. As métricas atuais medem retrieval, não provam correção factual da resposta final nem segurança do modelo.

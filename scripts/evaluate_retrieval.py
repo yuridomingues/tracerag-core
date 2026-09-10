@@ -1,4 +1,4 @@
-"""Executa o benchmark local de recuperacao e imprime metricas em JSON."""
+"""Executa benchmark de retrieval por projeto e imprime metricas em JSON."""
 
 from __future__ import annotations
 
@@ -38,23 +38,31 @@ def carregar_casos(caminho: Path) -> list[CasoAvaliacao]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Avalia a recuperacao do indice RAG.")
-    parser.add_argument(
-        "--cases",
-        type=Path,
-        default=Path("data/eval_cases.jsonl"),
-        help="Arquivo JSONL com perguntas e origens esperadas.",
-    )
+    parser = argparse.ArgumentParser(description="Avalia retrieval de um projeto TraceRAG.")
+    parser.add_argument("--cases", type=Path, default=Path("data/eval_cases.jsonl"))
+    parser.add_argument("--project-id", default="docs-demo")
     parser.add_argument("--k", type=int, default=3)
+    parser.add_argument("--max-distance", type=float, default=None)
     args = parser.parse_args()
 
     casos = carregar_casos(args.cases)
-    resultado = avaliar_recuperacao(casos, buscar_contexto_detalhado, k=args.k)
+
+    def recuperar(pergunta: str, k: int):
+        return buscar_contexto_detalhado(
+            pergunta,
+            k=k,
+            project_id=args.project_id,
+            distancia_maxima=args.max_distance,
+        )
+
+    resultado = avaliar_recuperacao(casos, recuperar, k=args.k)
     print(
         json.dumps(
             {
+                "project_id": args.project_id,
                 "total_casos": resultado.total_casos,
                 "k": args.k,
+                "max_distance": args.max_distance,
                 "hit_rate": round(resultado.hit_rate, 4),
                 "mrr": round(resultado.mrr, 4),
                 "recall_origens": round(resultado.recall_origens, 4),

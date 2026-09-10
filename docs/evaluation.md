@@ -1,47 +1,45 @@
-# Avaliacao do RAG
+# Avaliação de retrieval
 
-O objetivo deste benchmark e medir a etapa de recuperacao antes de discutir qualidade generativa. A base de teste e pequena de proposito: os casos servem para tornar regressao visivel, nao para sustentar uma conclusao estatistica sobre desempenho em producao.
+O benchmark mede a etapa de recuperação antes da geração. O objetivo é detectar regressões quando mudam embeddings, chunking, top-k ou thresholds.
 
-## O que e medido
+## Métricas
 
-- `hit_rate`: proporcao de perguntas em que pelo menos uma origem esperada apareceu no top-k.
-- `mrr`: posicao media do primeiro documento esperado, com peso maior para acertos no topo.
-- `recall_origens`: fracao das origens esperadas recuperadas por pergunta.
+- `hit_rate`: proporção de perguntas em que pelo menos uma origem esperada apareceu no top-k;
+- `MRR`: posição do primeiro documento esperado, com peso maior para acertos no topo;
+- `recall_origens`: fração das origens esperadas recuperadas por pergunta.
 
-Essas metricas avaliam retrieval. Elas nao provam que a resposta do LLM esta correta, completa ou segura.
+Essas métricas não provam que a resposta do LLM está correta. Elas medem somente retrieval.
 
-## Casos
+## Dataset
 
-Os casos ficam em `data/eval_cases.jsonl`. Cada linha registra uma pergunta e os arquivos que deveriam sustentar a resposta. Os documentos atuais sao sinteticos e pertencem ao proprio repositorio.
+Os casos ficam em `data/eval_cases.jsonl`. Cada linha contém uma pergunta e as fontes que deveriam sustentar a resposta. A base incluída é sintética e serve para regressão técnica.
 
-## Como executar
-
-Primeiro indexe a base de teste:
+## Execução
 
 ```bash
-uv run python -c "from app.ingestao import indexar_documentos; indexar_documentos('data/documentos_teste')"
+uv run python -c "from app.ingestao import indexar_documentos; indexar_documentos('data/documentos_teste', project_id='docs-demo')"
+uv run python scripts/evaluate_retrieval.py --project-id docs-demo --k 3
 ```
 
-Depois rode:
+Um threshold pode ser testado explicitamente:
 
 ```bash
-uv run python scripts/evaluate_retrieval.py --k 3
+uv run python scripts/evaluate_retrieval.py --project-id docs-demo --k 3 --max-distance 0.45
 ```
 
-O script imprime JSON para facilitar comparacao entre alteracoes de embedding, chunking e parametros de busca.
+O valor de threshold deve ser calibrado com dados de avaliação. Não existe um número universalmente correto.
 
-## Abstencao
+## Gate de CI futuro
 
-O pipeline agora interrompe a geracao quando nenhum trecho e recuperado. Nesse caso, o LLM nao e chamado. Isso cria um comportamento deterministico para ausencia de evidencia e reduz o risco de produzir recomendacao sem base indexada.
+A direção de produto é permitir que uma equipe registre um baseline e defina limites, por exemplo:
 
-Ainda falta definir um limiar de relevancia para distinguir "algum trecho foi recuperado" de "o trecho recuperado e suficientemente relevante". Esse limiar deve ser calibrado com um conjunto de avaliacao maior, em vez de ser escolhido por intuicao.
+- `hit_rate` não pode cair mais de 3 pontos percentuais;
+- `MRR` não pode cair abaixo do baseline configurado;
+- perguntas críticas devem recuperar ao menos uma fonte obrigatória;
+- casos não respondíveis devem continuar gerando abstensão.
 
-## Proximos experimentos
+O pipeline de CI deve falhar quando uma regressão ultrapassar o contrato do projeto.
 
-1. Ampliar o conjunto de perguntas com exemplos revisados pela equipe de pesquisa.
-2. Separar casos respondiveis e nao respondiveis.
-3. Medir custo e latencia por etapa.
-4. Criar avaliacao de citacao: a recomendacao deve apontar quais trechos sustentam cada afirmacao relevante.
-5. Testar documentos com instrucoes maliciosas ou irrelevantes para verificar se o contexto nao passa a controlar o comportamento do sistema.
+## Limites atuais
 
-Resultados numericos nao sao registrados aqui ate o benchmark ser executado em um ambiente configurado com o embedding escolhido.
+Ainda faltam datasets maiores, avaliação de geração, custo, latência, adversarial retrieval e integração com um endpoint externo. O projeto não declara métricas de produção sem execução reproduzível.

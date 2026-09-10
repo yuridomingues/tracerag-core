@@ -1,0 +1,1 @@
+Mudancas de alto risco precisam de aprovacao de um responsavel tecnico antes do deploy. Um deploy deve ser revertido quando causa erro critico, perda de funcionalidade essencial ou quebra uma metrica definida como gate de release. Este documento e sintetico e existe apenas para testes.

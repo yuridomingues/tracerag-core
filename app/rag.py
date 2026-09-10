@@ -1,58 +1,43 @@
-"""Pipeline RAG para recuperacao de contexto e geracao de resposta."""
+"""Pipeline RAG com retrieval rastreavel e abstencao explicita."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
 
-from app.config import carregar_configuracoes
 from app.embeddings import gerar_embedding
-from app.ingestao import NOME_COLECAO
+from app.ingestao import obter_colecao
 from app.llm import chamar_llm
-
-try:
-    import chromadb  # type: ignore
-except Exception:  # pragma: no cover - import opcional em ambiente reduzido
-    chromadb = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 RESPOSTA_SEM_CONTEXTO = (
-    "Nao ha contexto suficiente na base indexada para responder com seguranca."
+    "Nao ha evidencia suficiente na base indexada para responder com seguranca."
 )
 
 
 @dataclass(frozen=True)
 class TrechoRecuperado:
-    """Trecho retornado pelo indice com proveniencia quando disponivel."""
-
     texto: str
     origem: str | None = None
     chunk: str | None = None
     distancia: float | None = None
 
 
-def _obter_colecao():
-    """Retorna ou cria a colecao persistente do ChromaDB."""
-
-    if chromadb is None:
-        raise RuntimeError("Dependencia chromadb nao disponivel no ambiente.")
-
-    configuracoes = carregar_configuracoes()
-    cliente = chromadb.PersistentClient(path=configuracoes.chroma_persist_dir)
-    return cliente.get_or_create_collection(
-        name=NOME_COLECAO, metadata={"hnsw:space": "cosine"}
-    )
-
-
-def buscar_contexto_detalhado(pergunta: str, k: int = 3) -> list[TrechoRecuperado]:
-    """Busca trechos relevantes preservando metadados de origem e distancia."""
+def buscar_contexto_detalhado(
+    pergunta: str,
+    k: int = 3,
+    project_id: str = "default",
+    distancia_maxima: float | None = None,
+) -> list[TrechoRecuperado]:
+    """Busca evidencias preservando origem, chunk e distancia."""
 
     if k <= 0:
         raise ValueError("k deve ser maior que zero.")
+    if distancia_maxima is not None and distancia_maxima < 0:
+        raise ValueError("distancia_maxima nao pode ser negativa.")
 
-    logger.info("Iniciando busca de contexto para pergunta: %s", pergunta)
-    colecao = _obter_colecao()
+    colecao = obter_colecao(project_id)
     embedding_pergunta = gerar_embedding(pergunta)
     resultado = colecao.query(query_embeddings=[embedding_pergunta], n_results=k)
 
@@ -68,53 +53,69 @@ def buscar_contexto_detalhado(pergunta: str, k: int = 3) -> list[TrechoRecuperad
         metadata = metadados[indice] if indice < len(metadados) else None
         metadata = metadata if isinstance(metadata, dict) else {}
         distancia = distancias[indice] if indice < len(distancias) else None
+        distancia_float = float(distancia) if distancia is not None else None
+
+        if (
+            distancia_maxima is not None
+            and distancia_float is not None
+            and distancia_float > distancia_maxima
+        ):
+            continue
 
         trechos.append(
             TrechoRecuperado(
                 texto=str(documento),
                 origem=str(metadata["origem"]) if metadata.get("origem") else None,
                 chunk=str(metadata["chunk"]) if metadata.get("chunk") is not None else None,
-                distancia=float(distancia) if distancia is not None else None,
+                distancia=distancia_float,
             )
         )
 
     return trechos
 
 
-def buscar_contexto(pergunta: str, k: int = 3) -> list[str]:
-    """Busca apenas o texto dos trechos para manter compatibilidade com a API."""
-
-    return [trecho.texto for trecho in buscar_contexto_detalhado(pergunta, k=k)]
-
-
-def pipeline_rag(
+def buscar_contexto(
     pergunta: str,
-    dados_empresa: dict,
-    contexto: list[str] | None = None,
-) -> str:
-    """Monta o prompt e chama o LLM usando exatamente o contexto informado."""
+    k: int = 3,
+    project_id: str = "default",
+    distancia_maxima: float | None = None,
+) -> list[str]:
+    return [
+        trecho.texto
+        for trecho in buscar_contexto_detalhado(
+            pergunta,
+            k=k,
+            project_id=project_id,
+            distancia_maxima=distancia_maxima,
+        )
+    ]
+
+
+def pipeline_rag(pergunta: str, contexto: list[str] | None = None) -> str:
+    """Gera resposta somente a partir do contexto explicitamente fornecido."""
 
     if contexto is None:
         contexto = buscar_contexto(pergunta)
 
     if not contexto:
-        logger.info("Analise interrompida por ausencia de contexto recuperado.")
+        logger.info("Geracao interrompida por ausencia de evidencia recuperada.")
         return RESPOSTA_SEM_CONTEXTO
 
     prompt_sistema = (
-        "Voce e um assistente especializado em analise ESG para microempreendimentos. "
-        "Responda apenas com base no contexto fornecido; se nao souber, diga que nao ha dados suficientes."
+        "Voce responde perguntas sobre uma base de conhecimento privada. "
+        "Use somente o contexto fornecido. Nao complete lacunas com conhecimento externo. "
+        "Quando a evidencia nao sustentar uma afirmacao, deixe a limitacao explicita."
     )
     prompt_usuario = (
-        f"Dados da empresa: {dados_empresa}\n\n"
         f"Pergunta: {pergunta}\n\n"
-        f"Contexto recuperado:\n- " + "\n- ".join(contexto)
+        "Evidencias recuperadas:\n- " + "\n- ".join(contexto)
     )
 
-    mensagens = [
-        {"role": "system", "content": prompt_sistema},
-        {"role": "user", "content": prompt_usuario},
-    ]
-    resposta = chamar_llm(mensagens)
-    logger.info("Pipeline RAG finalizado com sucesso.")
+    resposta = chamar_llm(
+        [
+            {"role": "system", "content": prompt_sistema},
+            {"role": "user", "content": prompt_usuario},
+        ]
+    )
+    logger.info("Pipeline RAG finalizado.")
     return resposta
