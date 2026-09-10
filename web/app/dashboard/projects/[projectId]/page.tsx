@@ -117,7 +117,7 @@ export default async function ProjectPage({
               <button className="button primary" type="submit">Run evaluation</button>
             </form>
           ) : <p className="muted">Add at least one endpoint and dataset first.</p>}
-          <p className="muted small">Alpha limit: 25 cases per synchronous run.</p>
+          <p className="muted small">Alpha limit: 20 cases per synchronous run.</p>
         </article>
         <article className="card"><p className="eyebrow">CI</p><h3>Create API key</h3><ApiKeyCreator projectId={projectId} /></article>
       </section>
