@@ -180,6 +180,7 @@ export async function runDatasetAction(formData: FormData) {
   ]);
   if (!dataset || !endpoint) projectError(projectId, "Dataset or endpoint not found.");
 
+  let runId: string;
   try {
     const result = await executeRun(createAdminClient(), {
       projectId,
@@ -188,8 +189,10 @@ export async function runDatasetAction(formData: FormData) {
       triggeredBy: userId,
       setAsBaseline,
     });
-    redirect(`/dashboard/projects/${projectId}?run=${result.id}`);
+    runId = result.id;
   } catch (error) {
     projectError(projectId, error instanceof Error ? error.message : "Could not execute run.");
   }
+
+  redirect(`/dashboard/projects/${projectId}?run=${runId}`);
 }
