@@ -38,6 +38,7 @@ def gerar_analise(requisicao: RequisicaoAnalise) -> RespostaAnalise:
         recomendacao = pipeline_rag(
             pergunta=requisicao.pergunta,
             dados_empresa=requisicao.dados_empresa.model_dump(),
+            contexto=contexto,
         )
         return RespostaAnalise(
             empresa=requisicao.dados_empresa.nome,

@@ -30,14 +30,18 @@ def test_validacao_de_dados_invalidos() -> None:
 def test_endpoint_gerar_com_mock_do_llm(monkeypatch) -> None:
     """Testa o endpoint principal sem chamar APIs reais."""
 
+    contexto_esperado = ["Contexto ESG de teste."]
+    contexto_recebido: list[list[str]] = []
+
     monkeypatch.setattr(
-        analise_module, "buscar_contexto", lambda pergunta: ["Contexto ESG de teste."]
+        analise_module, "buscar_contexto", lambda pergunta: contexto_esperado
     )
-    monkeypatch.setattr(
-        analise_module,
-        "pipeline_rag",
-        lambda pergunta, dados_empresa: "Plano de acao ESG mockado.",
-    )
+
+    def pipeline_mock(pergunta, dados_empresa, contexto=None):
+        contexto_recebido.append(contexto)
+        return "Plano de acao ESG mockado."
+
+    monkeypatch.setattr(analise_module, "pipeline_rag", pipeline_mock)
 
     payload = {
         "dados_empresa": {
@@ -54,4 +58,6 @@ def test_endpoint_gerar_com_mock_do_llm(monkeypatch) -> None:
     assert resposta.status_code == 200
     body = resposta.json()
     assert body["empresa"] == "Padaria Serra Verde"
+    assert body["trechos_contexto_usados"] == contexto_esperado
+    assert contexto_recebido == [contexto_esperado]
     assert "mockado" in body["recomendacao"]
