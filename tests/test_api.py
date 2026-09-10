@@ -1,63 +1,78 @@
-"""Testes dos endpoints da API."""
+"""Testes dos endpoints do TraceRAG Core."""
 
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
 import app.main as main_module
-import app.routers.analise as analise_module
+import app.routers.analise as api_module
+from app.rag import TrechoRecuperado
 
 client = TestClient(main_module.app)
 
 
 def test_healthcheck() -> None:
-    """Verifica o healthcheck da API."""
-
-    resposta = client.get("/analise/saude")
+    resposta = client.get("/v1/health")
 
     assert resposta.status_code == 200
-    assert resposta.json() == {"status": "ok"}
+    assert resposta.json() == {"status": "ok", "product": "tracerag-core"}
 
 
-def test_validacao_de_dados_invalidos() -> None:
-    """Garante que dados invalidos retornam 422."""
-
-    resposta = client.post("/analise/gerar", json={"dados_empresa": {"nome": "A"}})
+def test_validacao_de_payload_invalido() -> None:
+    resposta = client.post("/v1/projects/demo/query", json={"pergunta": "x"})
 
     assert resposta.status_code == 422
 
 
-def test_endpoint_gerar_com_mock_do_llm(monkeypatch) -> None:
-    """Testa o endpoint principal sem chamar APIs reais."""
-
-    contexto_esperado = ["Contexto ESG de teste."]
+def test_query_devolve_mesmas_evidencias_usadas_no_pipeline(monkeypatch) -> None:
+    trechos = [
+        TrechoRecuperado(
+            texto="A API limita chamadas a 100 requisicoes por minuto.",
+            origem="api_rate_limits.txt",
+            chunk="0",
+            distancia=0.08,
+        )
+    ]
     contexto_recebido: list[list[str]] = []
 
     monkeypatch.setattr(
-        analise_module, "buscar_contexto", lambda pergunta: contexto_esperado
+        api_module,
+        "buscar_contexto_detalhado",
+        lambda pergunta, k, project_id, distancia_maxima: trechos,
     )
 
-    def pipeline_mock(pergunta, dados_empresa, contexto=None):
+    def pipeline_mock(pergunta, contexto=None):
         contexto_recebido.append(contexto)
-        return "Plano de acao ESG mockado."
+        return "O limite documentado e 100 requisicoes por minuto."
 
-    monkeypatch.setattr(analise_module, "pipeline_rag", pipeline_mock)
+    monkeypatch.setattr(api_module, "pipeline_rag", pipeline_mock)
 
-    payload = {
-        "dados_empresa": {
-            "nome": "Padaria Serra Verde",
-            "setor": "alimentacao",
-            "descricao": "Pequena padaria de bairro com foco em atendimento local e fornecedores regionais.",
-            "funcionarios": 6,
-        },
-        "pergunta": "Quais acoes ESG devo priorizar?",
-    }
-
-    resposta = client.post("/analise/gerar", json=payload)
+    resposta = client.post(
+        "/v1/projects/docs-demo/query",
+        json={"pergunta": "Qual e o limite da API?", "k": 3},
+    )
 
     assert resposta.status_code == 200
     body = resposta.json()
-    assert body["empresa"] == "Padaria Serra Verde"
-    assert body["trechos_contexto_usados"] == contexto_esperado
-    assert contexto_recebido == [contexto_esperado]
-    assert "mockado" in body["recomendacao"]
+    assert body["project_id"] == "docs-demo"
+    assert body["abstencao"] is False
+    assert body["evidencias"][0]["origem"] == "api_rate_limits.txt"
+    assert body["evidencias"][0]["distancia"] == 0.08
+    assert contexto_recebido == [[trechos[0].texto]]
+
+
+def test_query_marca_abstencao_sem_evidencia(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api_module,
+        "buscar_contexto_detalhado",
+        lambda pergunta, k, project_id, distancia_maxima: [],
+    )
+
+    resposta = client.post(
+        "/v1/projects/docs-demo/query",
+        json={"pergunta": "Pergunta sem resposta na base"},
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["abstencao"] is True
+    assert resposta.json()["evidencias"] == []
