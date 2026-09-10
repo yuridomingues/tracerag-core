@@ -1,100 +1,79 @@
-# TraceRAG Core
+# TraceRAG
 
-Núcleo experimental para testar regressões em sistemas RAG com foco em retrieval verificável.
+Black-box regression testing for RAG APIs.
 
-O projeto nasceu da necessidade de responder perguntas simples que muitas aplicações de IA não conseguem responder bem: qual fonte sustentou a resposta, qual chunk foi recuperado, quanto esse retrieval mudou depois de trocar embedding ou chunking e quando o sistema deveria se recusar a responder.
+TraceRAG is being built as a narrow SaaS for teams that already have a RAG application and want a deterministic release gate without migrating their production observability stack.
 
-O objetivo não é competir com plataformas completas de observabilidade. O recorte é menor: regression testing de retrieval, evidência por consulta e uma API simples que pode ser colocada em CI.
+The repository contains two layers:
 
-## O que existe hoje
+- **Core (Python):** retrieval traceability, abstention and local retrieval evaluation.
+- **Web alpha (Next.js + Supabase):** accounts, workspaces, projects, endpoint contracts, eval datasets, run history, baselines and a CI API.
 
-- coleções separadas por `project_id`;
-- ingestão idempotente de documentos `.txt` com IDs determinísticos;
-- retrieval com origem, chunk e distância;
-- limiar opcional de distância para rejeitar evidência fraca;
-- abstensão determinística quando não há contexto suficiente;
-- benchmark com `hit_rate`, `MRR` e `recall_origens`;
-- API FastAPI que devolve resposta e evidências usadas;
-- testes automatizados e GitHub Actions.
-
-## Fluxo
+## Hosted workflow
 
 ```text
-Documentos
-   ↓
-chunking + embeddings
-   ↓
-coleção do projeto
-   ↓
-retrieval
-   ↓
-evidências + distância
-   ↓
-threshold opcional
-   ↓
-resposta ou abstensão
+existing RAG API
+      ↑
+      │ HTTPS / JSON
+TraceRAG runner
+      ↑
+eval dataset ──→ deterministic checks
+                     │
+                     ├─ success rate
+                     ├─ required/forbidden phrases
+                     ├─ expected-source recall
+                     └─ P95 latency
+                              │
+                    baseline comparison
+                              │
+                       PASS / FAIL
+                              │
+                         CI release gate
 ```
 
-## Instalação
+## Security boundary
+
+Target endpoints must use HTTPS. The runner resolves DNS and rejects loopback, private, link-local and other non-public addresses. Redirects are not followed and responses are capped at 1 MiB.
+
+Endpoint credentials are encrypted with AES-256-GCM before persistence. TraceRAG API keys are stored only as SHA-256 hashes.
+
+The Supabase schema enables RLS on every public table and scopes access through workspace/project membership.
+
+## Web alpha
+
+See `web/README.md`.
+
+Required server configuration:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+SUPABASE_SECRET_KEY
+TRACERAG_ENCRYPTION_KEY
+```
+
+Apply `supabase/schema.sql` to a dedicated Supabase project before running the hosted app.
+
+## Core
 
 ```bash
 uv sync
-```
-
-Copie `.env.example` para `.env` e configure o provedor desejado.
-
-## Indexar um projeto
-
-```bash
 uv run python -c "from app.ingestao import indexar_documentos; print(indexar_documentos('data/documentos_teste', project_id='docs-demo'))"
-```
-
-## Rodar API
-
-```bash
 uv run uvicorn app.main:app --reload
-```
-
-Healthcheck:
-
-```bash
-curl http://127.0.0.1:8000/v1/health
-```
-
-Consulta:
-
-```bash
-curl -X POST http://127.0.0.1:8000/v1/projects/docs-demo/query \
-  -H 'Content-Type: application/json' \
-  -d '{"pergunta":"Qual é o limite de requisições da API?","k":3,"distancia_maxima":0.45}'
-```
-
-A resposta inclui `abstencao` e a lista de `evidencias` com origem, chunk e distância.
-
-## Benchmark
-
-Depois de indexar a base de teste:
-
-```bash
 uv run python scripts/evaluate_retrieval.py --project-id docs-demo --k 3
 ```
 
-Para testar um threshold:
+## Product boundary
 
-```bash
-uv run python scripts/evaluate_retrieval.py --project-id docs-demo --k 3 --max-distance 0.45
+This is an alpha, not a claim of product-market fit. The milestone stops at:
+
+```text
+account → workspace → project → existing RAG endpoint
+→ eval dataset → run → baseline comparison → CI pass/fail
 ```
 
-Os números só devem ser registrados depois de executar o benchmark com o embedding e a base que realmente serão usados. Um threshold não deve ser escolhido por intuição.
+Billing, queues, SSO, broad LLM observability, prompt management and enterprise administration stay outside this milestone until usage justifies them.
 
-## Direção de produto
+## Validation target
 
-A hipótese comercial é oferecer uma camada simples de regression testing para equipes pequenas que já possuem RAG, mas ainda validam mudanças manualmente.
-
-O produto futuro pode receber um endpoint do cliente ou SDK, executar um dataset de perguntas, comparar retrieval entre versões e bloquear um deploy quando uma mudança ultrapassar os limites configurados.
-
-Isso ainda não é um SaaS pronto. Antes de produção faltam autenticação, isolamento forte de tenants, armazenamento gerenciado, política de retenção, rate limiting, billing e observabilidade operacional. Essas lacunas estão documentadas em `docs/saas-readiness.md`.
-
-## Limites
-
-A base incluída é sintética e serve apenas para regressão técnica. As métricas atuais medem retrieval, não provam correção factual da resposta final nem segurança do modelo.
+The first target users are small AI agencies, consultancies and product teams that maintain RAG systems and currently validate retrieval/answer changes manually.
