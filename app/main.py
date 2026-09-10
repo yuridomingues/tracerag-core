@@ -1,4 +1,4 @@
-"""Aplicacao principal FastAPI."""
+"""Aplicacao principal FastAPI do TraceRAG Core."""
 
 from __future__ import annotations
 
@@ -6,17 +6,17 @@ import logging
 
 from fastapi import FastAPI
 
-from app.routers.analise import router as analise_router
+from app.routers.analise import router as rag_router
 
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
-    title="Smart Impact IA",
+    title="TraceRAG Core",
     description=(
-        "API experimental para analise de microempreendimentos com LLM + RAG, "
-        "focada em recomendacoes ESG e ODS."
+        "Nucleo experimental para regression testing de RAG, com retrieval rastreavel, "
+        "abstencao e evidencias por projeto."
     ),
-    version="0.1.0",
+    version="0.2.0",
 )
 
-app.include_router(analise_router)
+app.include_router(rag_router)
