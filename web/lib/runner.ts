@@ -162,8 +162,8 @@ export async function executeRun(
   if (!typedCases.length) {
     throw new Error("Dataset has no evaluation cases.");
   }
-  if (typedCases.length > 25) {
-    throw new Error("Alpha runs are limited to 25 cases.");
+  if (typedCases.length > 20) {
+    throw new Error("Alpha runs are limited to 20 cases.");
   }
 
   const { data: run, error: runError } = await admin
