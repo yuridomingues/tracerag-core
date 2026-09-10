@@ -139,7 +139,7 @@ grant usage on schema private to authenticated;
 
 create or replace function private.can_access_workspace(target_workspace uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select (select auth.uid()) is not null and exists (
     select 1 from public.workspaces w
@@ -152,7 +152,7 @@ $$;
 
 create or replace function private.can_edit_workspace(target_workspace uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select (select auth.uid()) is not null and exists (
     select 1 from public.workspaces w
@@ -165,7 +165,7 @@ $$;
 
 create or replace function private.is_workspace_owner(target_workspace uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select (select auth.uid()) is not null and exists (
     select 1 from public.workspaces w
@@ -175,7 +175,7 @@ $$;
 
 create or replace function private.can_access_project(target_project uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select exists (
     select 1 from public.projects p
@@ -185,7 +185,7 @@ $$;
 
 create or replace function private.can_edit_project(target_project uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select exists (
     select 1 from public.projects p
@@ -195,7 +195,7 @@ $$;
 
 create or replace function private.can_access_dataset(target_dataset uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select exists (
     select 1 from public.datasets d
@@ -205,7 +205,7 @@ $$;
 
 create or replace function private.can_edit_dataset(target_dataset uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select exists (
     select 1 from public.datasets d
@@ -215,7 +215,7 @@ $$;
 
 create or replace function private.can_access_run(target_run uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select exists (
     select 1 from public.eval_runs r
@@ -225,7 +225,7 @@ $$;
 
 create or replace function private.can_edit_run(target_run uuid)
 returns boolean language sql stable security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select exists (
     select 1 from public.eval_runs r
@@ -255,7 +255,7 @@ grant execute on function private.can_edit_run(uuid) to authenticated;
 
 create or replace function private.add_workspace_owner()
 returns trigger language plpgsql security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
 begin
   insert into public.workspace_members(workspace_id, user_id, role)
