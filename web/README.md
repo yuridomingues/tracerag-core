@@ -35,7 +35,7 @@ A passing gate returns HTTP 200. A regression returns HTTP 409 so `curl --fail-w
 ## Alpha constraints
 
 - synchronous runs only;
-- maximum 25 cases per run;
+- maximum 20 cases per run;
 - POST + JSON RAG endpoints only;
 - deterministic phrase/source checks, not LLM-as-judge;
 - no billing yet;
