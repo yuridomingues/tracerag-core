@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "smart-impact-ia"
-version = "0.1.0"
-description = "Prototipo RAG para analise ESG de microempreendimentos"
+name = "tracerag-core"
+version = "0.2.0"
+description = "Evaluation-first RAG core with traceable retrieval, abstention and regression tests"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi==0.115.0",
