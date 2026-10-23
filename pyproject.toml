@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "smart-impact-ia"
+name = "tracerag-core"
 version = "0.1.0"
 description = "Evaluation-first RAG core with traceable retrieval, abstention and regression tests"
 requires-python = ">=3.11,<3.12"
@@ -14,6 +14,7 @@ dependencies = [
     "pydantic-settings==2.6.1",
     "sentence-transformers==3.0.1",
     "chromadb==0.5.5",
+    "torch>=2.4",
     "pytest==8.3.2",
     "httpx==0.27.0",
     "requests==2.32.3",
@@ -26,6 +27,15 @@ package-dir = { "" = "." }
 where = ["."]
 include = ["app*"]
 exclude = ["tests*", "data*"]
+
+# Embeddings run on CPU; the default PyPI torch wheel pulls ~5 GB of CUDA libraries.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
